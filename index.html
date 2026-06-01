@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BudPE Server Status</title>
+    <meta
+      name="description"
+      content="Live server telemetry and activity feed for play.budpe.com:25565"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+    <script
+      defer
+      src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"
+    ></script>
+    <script defer src="./main.js"></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="top-nav">
+        <div class="brand">
+          <span class="brand-title">BudPE Network</span>
+          <span id="motdSubtitle" class="brand-subtitle loading">Loading subtitle...</span>
+        </div>
+
+        <div class="nav-actions">
+          <span id="onlinePill" class="pill loading">Checking...</span>
+          <button id="copyIpButton" class="button" type="button">Copy IP</button>
+          <button id="refreshButton" class="button button-primary" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <main class="layout-grid">
+        <section class="panel panel-hero">
+          <div class="panel-header">
+            <h1>Server Telemetry</h1>
+            <p id="lastUpdated" class="meta-text loading">Last updated: waiting for first fetch...</p>
+          </div>
+
+          <div class="hero-grid">
+            <div class="server-icon-wrap">
+              <img
+                id="serverIcon"
+                src="https://api.mcsrvstat.us/icon/play.budpe.com:25565"
+                alt="Server icon"
+                width="64"
+                height="64"
+              />
+              <p class="meta-text">play.budpe.com:25565</p>
+            </div>
+
+            <div class="players-summary">
+              <div class="summary-top">
+                <span id="playersCount" class="loading">Players: -- / --</span>
+                <span id="playersPercent" class="chip loading">--%</span>
+              </div>
+              <div class="progress-track" aria-label="player usage bar">
+                <div id="playersFill" class="progress-fill"></div>
+              </div>
+              <canvas id="playersSparkline" aria-label="Players over time"></canvas>
+            </div>
+          </div>
+
+          <div class="chip-row">
+            <span id="versionChip" class="chip loading">version: --</span>
+            <span id="protocolChip" class="chip loading">protocol: --</span>
+            <span id="softwareChip" class="chip loading">software: --</span>
+          </div>
+        </section>
+
+        <section class="panel panel-details">
+          <div class="panel-header">
+            <h2>Server Details</h2>
+          </div>
+          <table class="details-table">
+            <tbody>
+              <tr><th>IP</th><td id="detailIp" class="loading">--</td></tr>
+              <tr><th>Hostname</th><td id="detailHostname" class="loading">--</td></tr>
+              <tr><th>Software</th><td id="detailSoftware" class="loading">--</td></tr>
+              <tr><th>Debug Ping</th><td id="debugPing" class="loading">--</td></tr>
+              <tr><th>Debug Query</th><td id="debugQuery" class="loading">--</td></tr>
+              <tr><th>Debug SRV</th><td id="debugSrv" class="loading">--</td></tr>
+              <tr><th>Debug Cache Time</th><td id="debugCachetime" class="loading">--</td></tr>
+              <tr><th>Debug Animated MOTD</th><td id="debugAnimatedMotd" class="loading">--</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel panel-admin">
+          <div class="panel-header">
+            <h2>Admin Diagnostics</h2>
+            <div class="panel-actions">
+              <button id="exportHistoryBtn" class="button" type="button">Export History JSON</button>
+              <button id="clearHistoryBtn" class="button" type="button">Clear History</button>
+            </div>
+          </div>
+
+          <div class="admin-grid">
+            <div class="subpanel">
+              <h3>Extended Debug</h3>
+              <table class="details-table">
+                <tbody>
+                  <tr><th>Port</th><td id="detailPort" class="loading">--</td></tr>
+                  <tr><th>EULA Blocked</th><td id="detailEulaBlocked" class="loading">--</td></tr>
+                  <tr><th>API Version</th><td id="debugApiVersion" class="loading">--</td></tr>
+                  <tr><th>Cache Hit</th><td id="debugCacheHit" class="loading">--</td></tr>
+                  <tr><th>Cache Expire</th><td id="debugCacheExpire" class="loading">--</td></tr>
+                  <tr><th>Debug Bedrock</th><td id="debugBedrock" class="loading">--</td></tr>
+                  <tr><th>Debug Query Mismatch</th><td id="debugQueryMismatch" class="loading">--</td></tr>
+                  <tr><th>Debug IP in SRV</th><td id="debugIpInSrv" class="loading">--</td></tr>
+                  <tr><th>Debug CNAME in SRV</th><td id="debugCnameInSrv" class="loading">--</td></tr>
+                  <tr><th>Debug Cache Time Local</th><td id="debugCacheTimeLocal" class="loading">--</td></tr>
+                  <tr><th>Debug Query Error</th><td id="debugQueryError" class="loading">--</td></tr>
+                  <tr><th>Telemetry Fetch Latency</th><td id="debugTelemetryLatency" class="loading">--</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="subpanel">
+              <h3>DNS Chain</h3>
+              <ul id="debugDnsList" class="dns-list">
+                <li class="loading">Loading DNS records...</li>
+              </ul>
+              <h3>Raw Telemetry JSON</h3>
+              <pre id="rawTelemetry" class="raw-json loading">Waiting for telemetry...</pre>
+            </div>
+          </div>
+
+          <div class="subpanel history-subpanel">
+            <h3>Telemetry Snapshot History</h3>
+            <p class="meta-text">Stored in browser localStorage for admin record keeping.</p>
+            <div class="history-table-wrap">
+              <table class="history-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Online</th>
+                    <th>Players</th>
+                    <th>Version</th>
+                    <th>Protocol</th>
+                    <th>Cache Hit</th>
+                    <th>Fetch ms</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                  <tr><td colspan="7" class="loading">No snapshots yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel-players">
+          <div class="panel-header">
+            <h2>Online Players</h2>
+          </div>
+          <div id="playersList" class="players-list">
+            <p class="empty-state loading">Loading players...</p>
+          </div>
+        </section>
+
+        <section class="panel panel-activity">
+          <div class="panel-header">
+            <h2>Live Activity</h2>
+          </div>
+          <ul id="activityFeed" class="activity-feed">
+            <li class="activity-item loading">Loading activity feed...</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
