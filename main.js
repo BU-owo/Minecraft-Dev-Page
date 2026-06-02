@@ -62,6 +62,7 @@ const elements = {
 const state = {
   telemetryReady: false,
   activityReady: false,
+  activitySnapshotInitialized: false,
   lastTelemetryPlayers: [],
   historyCharts: {
     uptime: null,
@@ -1056,10 +1057,13 @@ async function fetchActivity() {
     const nextSnapshot = buildActivitySnapshot(payload);
 
     detectExplicitEvents(payload);
-    detectJoinLeaveEvents(nextSnapshot);
-    detectInferredEvents(nextSnapshot);
+    if (state.activitySnapshotInitialized) {
+      detectJoinLeaveEvents(nextSnapshot);
+      detectInferredEvents(nextSnapshot);
+    }
 
     state.activitySnapshot = nextSnapshot;
+    state.activitySnapshotInitialized = true;
     if (state.lastTelemetryPlayers.length === 0) {
       const activityPlayers = getActivityPlayers(nextSnapshot);
       renderPlayersList(activityPlayers);
