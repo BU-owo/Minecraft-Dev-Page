@@ -1,7 +1,6 @@
 import { kv } from "@vercel/kv";
 
 const HISTORY_KEY = "budpe:telemetry-history";
-const HISTORY_LIMIT = 250;
 const DISPLAY_MAX_PLAYERS = 20;
 const SERVER_ADDRESS = "play.budpe.com:25565";
 const TELEMETRY_URL = `https://api.mcsrvstat.us/3/${SERVER_ADDRESS}`;
@@ -25,14 +24,13 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function kvConfigured() {
+  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
 async function loadHistory() {
-  try {
-    const stored = await kv.get(HISTORY_KEY);
-    return Array.isArray(stored) ? stored : [];
-  } catch (error) {
-    console.error(error);
-    return [];
-  }
+  const stored = await kv.get(HISTORY_KEY);
+  return Array.isArray(stored) ? stored : [];
 }
 
 function buildIssueScore(data) {
@@ -49,9 +47,10 @@ function buildIssueScore(data) {
 }
 
 function toSnapshot(data, latencyMs) {
-  const playersOnline = toNumber(data?.players?.online, 0);
+  const playersOnlineRaw = toNumber(data?.players?.online, 0);
   const playersMaxRaw = toNumber(data?.players?.max, 0);
   const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
+  const playersOnline = Math.min(playersOnlineRaw, playersMax);
 
   return {
     timestampIso: new Date().toISOString(),
@@ -88,6 +87,14 @@ export default async function handler(req, res) {
     return;
   }
 
+  if (!kvConfigured()) {
+    sendJson(res, 503, {
+      error: "Shared history backend is not configured",
+      details: "Missing KV_REST_API_URL or KV_REST_API_TOKEN",
+    });
+    return;
+  }
+
   try {
     const startedAt = Date.now();
     const response = await fetch(TELEMETRY_URL, { cache: "no-store" });
@@ -98,13 +105,8 @@ export default async function handler(req, res) {
 
     const data = await response.json();
     const snapshot = toSnapshot(data, Date.now() - startedAt);
-    const history = [snapshot, ...(await loadHistory())].slice(0, HISTORY_LIMIT);
-
-    try {
-      await kv.set(HISTORY_KEY, history);
-    } catch (error) {
-      console.error(error);
-    }
+    const history = [snapshot, ...(await loadHistory())];
+    await kv.set(HISTORY_KEY, history);
 
     sendJson(res, 200, { ok: true, count: history.length });
   } catch (error) {

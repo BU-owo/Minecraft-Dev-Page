@@ -9,8 +9,6 @@ const MAX_POLL_SECONDS = 300;
 const POLL_SECONDS_KEY = "budpePollSeconds";
 const DISPLAY_MAX_PLAYERS = 20;
 const TELEMETRY_HISTORY_API_URL = "/api/history";
-const TELEMETRY_HISTORY_KEY = "budpeTelemetryHistory";
-const TELEMETRY_HISTORY_LIMIT = 250;
 
 const elements = {
   motdSubtitle: document.getElementById("motdSubtitle"),
@@ -55,7 +53,6 @@ const elements = {
   clearHistoryBtn: document.getElementById("clearHistoryBtn"),
   playersList: document.getElementById("playersList"),
   activityFeed: document.getElementById("activityFeed"),
-  sparklineCanvas: document.getElementById("playersSparkline"),
   uptimeCanvas: document.getElementById("uptimeChart"),
   playersChartCanvas: document.getElementById("playersChart"),
   issuesChartCanvas: document.getElementById("issuesChart"),
@@ -66,11 +63,6 @@ const state = {
   telemetryReady: false,
   activityReady: false,
   lastTelemetryPlayers: [],
-  sparkline: {
-    chart: null,
-    labels: [],
-    values: [],
-  },
   historyCharts: {
     uptime: null,
     players: null,
@@ -198,11 +190,16 @@ function normalizeTelemetryHistoryItem(item) {
     return null;
   }
 
+  const playersOnlineRaw = toNumber(item.playersOnline ?? parsePlayersValue(item.players), 0);
+  const playersMaxRaw = toNumber(item.playersMax ?? (typeof item.players === "string" ? Number(item.players.split("/")[1]?.trim()) : 0), 0);
+  const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
+  const playersOnline = Math.min(playersOnlineRaw, playersMax);
+
   return {
     label: item.timestamp ?? formatTimestamp(),
     online: parseBooleanValue(item.online),
-    playersOnline: toNumber(item.playersOnline ?? parsePlayersValue(item.players), 0),
-    playersMax: toNumber(item.playersMax ?? (typeof item.players === "string" ? Number(item.players.split("/")[1]?.trim()) : 0), 0),
+    playersOnline,
+    playersMax,
     issueScore: toNumber(item.issueScore ?? (parseBooleanValue(item.online) ? 0 : 1), parseBooleanValue(item.online) ? 0 : 1),
     fetchLatencyMs: item.fetchLatencyMs === "unknown" ? null : item.fetchLatencyMs == null ? null : toNumber(item.fetchLatencyMs, null),
   };
@@ -406,38 +403,17 @@ function renderRawTelemetry(data) {
   removeLoadingClass(elements.rawTelemetry);
 }
 
-function saveLocalTelemetryHistory() {
-  try {
-    localStorage.setItem(TELEMETRY_HISTORY_KEY, JSON.stringify(state.telemetryHistory));
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-function loadLocalTelemetryHistory() {
-  try {
-    const raw = localStorage.getItem(TELEMETRY_HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.slice(0, TELEMETRY_HISTORY_LIMIT) : [];
-  } catch (error) {
-    console.error(error);
-    return [];
-  }
-}
-
 function applyTelemetryHistory(history) {
-  state.telemetryHistory = Array.isArray(history)
-    ? history.slice(0, TELEMETRY_HISTORY_LIMIT)
-    : [];
-
-  saveLocalTelemetryHistory();
+  state.telemetryHistory = Array.isArray(history) ? history : [];
   renderTelemetryHistory();
 }
 
-async function loadTelemetryHistory() {
-  applyTelemetryHistory(loadLocalTelemetryHistory());
+function renderHistoryError(message) {
+  if (!elements.historyTableBody) return;
+  elements.historyTableBody.innerHTML = `<tr><td colspan="8" class="empty-state">${escapeHtml(message)}</td></tr>`;
+}
 
+async function loadTelemetryHistory() {
   try {
     const response = await fetch(TELEMETRY_HISTORY_API_URL, { cache: "no-store" });
     if (!response.ok) {
@@ -450,6 +426,7 @@ async function loadTelemetryHistory() {
     }
   } catch (error) {
     console.error(error);
+    renderHistoryError("Shared history backend unavailable. Check KV configuration.");
   }
 }
 
@@ -465,13 +442,17 @@ function renderTelemetryHistory() {
   }
 
   const fragment = document.createDocumentFragment();
-  for (const item of state.telemetryHistory.slice(0, 40)) {
+  for (const item of state.telemetryHistory) {
     const issueCount = Number.isFinite(Number(item.issueScore)) ? Number(item.issueScore) : 0;
+    const playersOnline = toNumber(item.playersOnline ?? parsePlayersValue(item.players), 0);
+    const playersMaxRaw = toNumber(item.playersMax ?? (typeof item.players === "string" ? Number(item.players.split("/")[1]?.trim()) : 0), 0);
+    const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
+    const playersDisplay = `${Math.min(playersOnline, playersMax)} / ${playersMax}`;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(item.timestamp)}</td>
       <td>${escapeHtml(item.online)}</td>
-      <td>${escapeHtml(item.players)}</td>
+      <td>${escapeHtml(playersDisplay)}</td>
       <td>${escapeHtml(item.version)}</td>
       <td>${escapeHtml(item.protocol)}</td>
       <td>${escapeHtml(item.cacheHit)}</td>
@@ -487,9 +468,10 @@ function renderTelemetryHistory() {
 
 async function addTelemetrySnapshot(data, latencyMs) {
   const issues = collectTelemetryIssues(data);
-  const playersOnline = Number(data?.players?.online ?? 0);
+  const playersOnlineRaw = Number(data?.players?.online ?? 0);
   const playersMaxRaw = Number(data?.players?.max ?? 0);
   const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
+  const playersOnline = Math.min(playersOnlineRaw, playersMax);
   const snapshot = {
     timestampIso: new Date().toISOString(),
     timestamp: formatTimestamp(),
@@ -504,8 +486,6 @@ async function addTelemetrySnapshot(data, latencyMs) {
     issueSummary: issues.length > 0 ? issues.join(", ") : "none",
     fetchLatencyMs: typeof latencyMs === "number" ? latencyMs : "unknown",
   };
-
-  applyTelemetryHistory([snapshot, ...state.telemetryHistory].slice(0, TELEMETRY_HISTORY_LIMIT));
 
   try {
     const response = await fetch(TELEMETRY_HISTORY_API_URL, {
@@ -704,69 +684,8 @@ function renderHistoryCharts() {
   });
 }
 
-function createSparkline() {
-  if (!elements.sparklineCanvas || typeof Chart === "undefined") {
-    return;
-  }
-
-  const ctx = elements.sparklineCanvas.getContext("2d");
-  state.sparkline.chart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: state.sparkline.labels,
-      datasets: [
-        {
-          data: state.sparkline.values,
-          borderColor: "#de7b7b",
-          borderWidth: 2,
-          tension: 0.35,
-          pointRadius: 0,
-          fill: false,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: true },
-      },
-      scales: {
-        x: {
-          display: false,
-        },
-        y: {
-          display: false,
-          beginAtZero: true,
-        },
-      },
-      animation: {
-        duration: 250,
-      },
-    },
-  });
-}
-
-function pushSparklinePoint(playersOnline) {
-  if (!state.sparkline.chart) return;
-
-  const now = new Date();
-  const label = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-
-  state.sparkline.labels.push(label);
-  state.sparkline.values.push(playersOnline);
-
-  if (state.sparkline.labels.length > 120) {
-    state.sparkline.labels.shift();
-    state.sparkline.values.shift();
-  }
-
-  state.sparkline.chart.update();
-}
-
 function renderPlayersList(list = []) {
-  renderPlayerCards(list, elements.playersList, "No players online.");
+  renderPlayerCards(list, elements.playersList, "No players online.", DISPLAY_MAX_PLAYERS);
 }
 
 function renderHeroPlayersList(list = []) {
@@ -832,9 +751,10 @@ function applyOnlineStatus(online) {
 
 async function renderTelemetry(data, latencyMs) {
   const online = Boolean(data?.online);
-  const playersOnline = Number(data?.players?.online ?? 0);
+  const playersOnlineRaw = Number(data?.players?.online ?? 0);
   const playersMaxRaw = Number(data?.players?.max ?? 0);
   const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
+  const playersOnline = Math.min(playersOnlineRaw, playersMax);
   const playersPercent = playersMax > 0 ? Math.round((playersOnline / playersMax) * 100) : 0;
   const clamped = clamp(playersPercent, 0, 100);
 
@@ -890,7 +810,6 @@ async function renderTelemetry(data, latencyMs) {
   const visiblePlayers = telemetryPlayers.length > 0 ? telemetryPlayers : getActivityPlayers();
   renderPlayersList(visiblePlayers);
   renderHeroPlayersList(visiblePlayers);
-  pushSparklinePoint(playersOnline);
   await addTelemetrySnapshot(data, latencyMs);
 
   setText(elements.lastUpdated, `Last updated: ${formatTimestamp()}`);
@@ -1200,7 +1119,6 @@ async function bootstrap() {
   syncPollControls();
 
   await loadTelemetryHistory();
-  createSparkline();
   setupEvents();
 
   await Promise.all([fetchTelemetry(), fetchActivity()]);

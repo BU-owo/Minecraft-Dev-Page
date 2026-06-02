@@ -12,7 +12,8 @@ This site is static, so Vercel can host it without a build step.
 
 If you prefer, you can also run the commands from Command Prompt instead of PowerShell.
 
-The dashboard reads live telemetry directly from the Minecraft APIs and stores snapshot history in shared Vercel KV, with browser localStorage as a fallback cache.
+The dashboard reads live telemetry directly from the Minecraft APIs and stores snapshot history in shared Vercel KV.
+History is unbounded (no fixed cap), so the timeline can continue indefinitely.
 
 To enable the shared backend, connect a Vercel KV store to the project so the `KV_REST_API_*` environment variables are available at runtime.
 
@@ -31,3 +32,9 @@ To change backend snapshot frequency, edit `.github/workflows/cron-snapshot.yml`
 2. Add secret `CRON_SECRET` in GitHub.
 3. In Vercel project environment variables, add `CRON_SECRET` with the same value and redeploy.
 4. The workflow will call your endpoint every 5 minutes to keep graph history updating even when no browser is open.
+5. To start collecting immediately, run the `Cron Snapshot` workflow once using `workflow_dispatch` in GitHub Actions.
+
+### Shared History Requirement
+
+- Shared graphs require a working Vercel KV binding in production (`KV_REST_API_URL` and `KV_REST_API_TOKEN`).
+- If KV is missing, `api/history` and `api/cron-snapshot` return `503` so setup problems are visible immediately.

@@ -105,6 +105,7 @@ body {
   display: grid;
   gap: 1rem;
   grid-template-columns: 1.6fr 1fr;
+  align-items: start;
 }
 
 .panel {
@@ -156,6 +157,14 @@ body {
 
 .panel-admin {
   grid-column: 1 / span 2;
+}
+
+.panel-details,
+.panel-history,
+.panel-admin,
+.panel-activity {
+  max-height: 72vh;
+  overflow: auto;
 }
 
 .panel-actions {
@@ -308,6 +317,10 @@ body {
 
 .server-icon-wrap img {
   image-rendering: pixelated;
+  width: 96px;
+  height: 96px;
+  max-width: 100%;
+  object-fit: contain;
 }
 
 .players-summary {
@@ -317,7 +330,7 @@ body {
   min-height: 160px;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.4rem;
 }
 
 .summary-top {
@@ -342,9 +355,13 @@ body {
   transition: width 250ms ease;
 }
 
+/* Safety net for stale cached HTML that still contains the removed sparkline. */
 #playersSparkline {
-  width: 100%;
-  height: 80px;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .hero-players-list {
@@ -542,6 +559,14 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .panel-details,
+  .panel-history,
+  .panel-admin,
+  .panel-activity {
+    max-height: none;
+    overflow: visible;
+  }
+
   .panel-hero,
   .panel-details,
   .panel-history,
@@ -569,6 +594,11 @@ body {
 }
 
 @media (max-width: 600px) {
+  .server-icon-wrap img {
+    width: 72px;
+    height: 72px;
+  }
+
   .top-nav {
     flex-direction: column;
     align-items: stretch;
