@@ -59,6 +59,7 @@ const elements = {
 const state = {
   telemetryReady: false,
   activityReady: false,
+  lastTelemetryPlayers: [],
   sparkline: {
     chart: null,
     labels: [],
@@ -261,6 +262,66 @@ function destroyChart(chart) {
   if (chart) {
     chart.destroy();
   }
+}
+
+function normalizePlayerIdentity(item) {
+  if (typeof item === "string") {
+    return {
+      name: item,
+      uuid: null,
+    };
+  }
+
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const name = item.name ?? item.username ?? item.player ?? null;
+  if (!name) {
+    return null;
+  }
+
+  return {
+    name,
+    uuid: item.uuid ?? null,
+  };
+}
+
+function dedupePlayers(players = []) {
+  const seen = new Set();
+  const unique = [];
+
+  for (const item of players) {
+    const normalized = normalizePlayerIdentity(item);
+    if (!normalized) continue;
+
+    const key = normalized.name.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    unique.push(normalized);
+  }
+
+  return unique;
+}
+
+function getTelemetryPlayers(data) {
+  const fromList = Array.isArray(data?.players?.list) ? data.players.list : [];
+  const fromArray = Array.isArray(data?.players) ? data.players : [];
+  return dedupePlayers(fromList.length > 0 ? fromList : fromArray);
+}
+
+function getActivityPlayers(snapshot = state.activitySnapshot) {
+  const players = [];
+
+  for (const [name, details] of snapshot.entries()) {
+    players.push({
+      name,
+      uuid: details?.uuid ?? null,
+    });
+  }
+
+  return dedupePlayers(players);
 }
 
 function renderDnsList(records = []) {
@@ -659,15 +720,28 @@ function renderPlayersList(list = []) {
   const fragment = document.createDocumentFragment();
 
   for (const item of list) {
-    const username = typeof item === "string" ? item : item?.name ?? item?.username ?? "Unknown";
+    const identity = normalizePlayerIdentity(item);
+    if (!identity) continue;
+
+    const username = identity.name;
     const card = document.createElement("article");
     card.className = "player-card";
 
     const avatar = document.createElement("img");
-    avatar.src = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/32`;
+    const fallbackAvatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/32`;
+    avatar.src = identity.uuid
+      ? `https://crafatar.com/avatars/${encodeURIComponent(identity.uuid)}?size=32&overlay`
+      : fallbackAvatarUrl;
     avatar.width = 32;
     avatar.height = 32;
     avatar.alt = `${username} avatar`;
+    avatar.loading = "lazy";
+    avatar.referrerPolicy = "no-referrer";
+    avatar.onerror = () => {
+      if (avatar.dataset.fallbackApplied === "true") return;
+      avatar.dataset.fallbackApplied = "true";
+      avatar.src = fallbackAvatarUrl;
+    };
 
     const name = document.createElement("span");
     name.textContent = username;
@@ -742,7 +816,10 @@ async function renderTelemetry(data, latencyMs) {
   elements.serverIcon.src = ICON_URL;
   elements.serverIcon.alt = `${SERVER_ADDRESS} icon`;
 
-  renderPlayersList(data?.players?.list ?? data?.players ?? []);
+  const telemetryPlayers = getTelemetryPlayers(data);
+  state.lastTelemetryPlayers = telemetryPlayers;
+
+  renderPlayersList(telemetryPlayers.length > 0 ? telemetryPlayers : getActivityPlayers());
   pushSparklinePoint(playersOnline);
   await addTelemetrySnapshot(data, latencyMs);
 
@@ -918,6 +995,7 @@ function buildActivitySnapshot(payload) {
     if (!name) continue;
 
     snapshot.set(name, {
+      uuid: player?.uuid ?? null,
       world: player?.world ?? "unknown",
       x: player?.x ?? null,
       y: player?.y ?? null,
@@ -993,6 +1071,9 @@ async function fetchActivity() {
     detectInferredEvents(nextSnapshot);
 
     state.activitySnapshot = nextSnapshot;
+    if (state.lastTelemetryPlayers.length === 0) {
+      renderPlayersList(getActivityPlayers(nextSnapshot));
+    }
     state.activityReady = true;
     renderActivityFeed();
   } catch (error) {
