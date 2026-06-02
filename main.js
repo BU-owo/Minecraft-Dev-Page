@@ -7,6 +7,7 @@ const DEFAULT_POLL_SECONDS = 30;
 const MIN_POLL_SECONDS = 5;
 const MAX_POLL_SECONDS = 300;
 const POLL_SECONDS_KEY = "budpePollSeconds";
+const DISPLAY_MAX_PLAYERS = 20;
 const TELEMETRY_HISTORY_API_URL = "/api/history";
 const TELEMETRY_HISTORY_KEY = "budpeTelemetryHistory";
 const TELEMETRY_HISTORY_LIMIT = 250;
@@ -486,13 +487,16 @@ function renderTelemetryHistory() {
 
 async function addTelemetrySnapshot(data, latencyMs) {
   const issues = collectTelemetryIssues(data);
+  const playersOnline = Number(data?.players?.online ?? 0);
+  const playersMaxRaw = Number(data?.players?.max ?? 0);
+  const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
   const snapshot = {
     timestampIso: new Date().toISOString(),
     timestamp: formatTimestamp(),
     online: Boolean(data?.online),
-    playersOnline: Number(data?.players?.online ?? 0),
-    playersMax: Number(data?.players?.max ?? 0),
-    players: `${Number(data?.players?.online ?? 0)} / ${Number(data?.players?.max ?? 0)}`,
+    playersOnline,
+    playersMax,
+    players: `${playersOnline} / ${playersMax}`,
     version: data?.version ?? "unknown",
     protocol: String(data?.protocol?.name ?? data?.protocol?.version ?? "unknown"),
     cacheHit: String(Boolean(data?.debug?.cachehit)),
@@ -829,7 +833,8 @@ function applyOnlineStatus(online) {
 async function renderTelemetry(data, latencyMs) {
   const online = Boolean(data?.online);
   const playersOnline = Number(data?.players?.online ?? 0);
-  const playersMax = Number(data?.players?.max ?? 0);
+  const playersMaxRaw = Number(data?.players?.max ?? 0);
+  const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
   const playersPercent = playersMax > 0 ? Math.round((playersOnline / playersMax) * 100) : 0;
   const clamped = clamp(playersPercent, 0, 100);
 

@@ -348,15 +348,19 @@ body {
 }
 
 .hero-players-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
   gap: 0.45rem;
 }
 
 .hero-players-list .player-card {
-  min-height: 38px;
+  min-height: 34px;
   padding: 0.35rem 0.45rem;
   font-size: 0.78rem;
+  width: auto;
+  max-width: 170px;
 }
 
 .hero-players-list .player-card img {

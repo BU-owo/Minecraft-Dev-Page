@@ -2,6 +2,7 @@ import { kv } from "@vercel/kv";
 
 const HISTORY_KEY = "budpe:telemetry-history";
 const HISTORY_LIMIT = 250;
+const DISPLAY_MAX_PLAYERS = 20;
 const SERVER_ADDRESS = "play.budpe.com:25565";
 const TELEMETRY_URL = `https://api.mcsrvstat.us/3/${SERVER_ADDRESS}`;
 
@@ -49,7 +50,8 @@ function buildIssueScore(data) {
 
 function toSnapshot(data, latencyMs) {
   const playersOnline = toNumber(data?.players?.online, 0);
-  const playersMax = toNumber(data?.players?.max, 0);
+  const playersMaxRaw = toNumber(data?.players?.max, 0);
+  const playersMax = Math.min(playersMaxRaw > 0 ? playersMaxRaw : DISPLAY_MAX_PLAYERS, DISPLAY_MAX_PLAYERS);
 
   return {
     timestampIso: new Date().toISOString(),
