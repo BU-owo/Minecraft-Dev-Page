@@ -95,7 +95,7 @@
         <section class="panel panel-history">
           <div class="panel-header">
             <h2>Trends Over Time</h2>
-            <p class="meta-text">Charts are built from telemetry snapshots stored in browser localStorage.</p>
+            <p class="meta-text">Charts are built from telemetry snapshots stored in shared Vercel KV, with local cache fallback.</p>
           </div>
 
           <div class="chart-grid">
@@ -175,7 +175,7 @@
 
           <div class="subpanel history-subpanel">
             <h3>Telemetry Snapshot History</h3>
-            <p class="meta-text">Stored in browser localStorage for admin record keeping.</p>
+            <p class="meta-text">Stored in shared backend storage so all visitors see the same history.</p>
             <div class="history-table-wrap">
               <table class="history-table">
                 <thead>

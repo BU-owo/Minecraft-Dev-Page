@@ -5,6 +5,7 @@ const ACTIVITY_URL = "https://map.budpe.com/maps/bu_world/live/players.json";
 const ACTIVITY_URL_FALLBACK = `https://corsproxy.io/?${encodeURIComponent(ACTIVITY_URL)}`;
 const TELEMETRY_POLL_MS = 30_000;
 const ACTIVITY_POLL_MS = 5_000;
+const TELEMETRY_HISTORY_API_URL = "/api/history";
 const TELEMETRY_HISTORY_KEY = "budpeTelemetryHistory";
 const TELEMETRY_HISTORY_LIMIT = 250;
 
@@ -205,8 +206,8 @@ function createChart(canvas, config) {
 }
 
 function chartOptions() {
-  const gridColor = "rgba(161, 176, 168, 0.14)";
-  const tickColor = "#a1b0a8";
+  const gridColor = "rgba(243, 184, 184, 0.14)";
+  const tickColor = "#efc5c5";
 
   return {
     responsive: true,
@@ -291,7 +292,7 @@ function renderRawTelemetry(data) {
   removeLoadingClass(elements.rawTelemetry);
 }
 
-function saveTelemetryHistory() {
+function saveLocalTelemetryHistory() {
   try {
     localStorage.setItem(TELEMETRY_HISTORY_KEY, JSON.stringify(state.telemetryHistory));
   } catch (error) {
@@ -299,13 +300,40 @@ function saveTelemetryHistory() {
   }
 }
 
-function loadTelemetryHistory() {
+function loadLocalTelemetryHistory() {
   try {
     const raw = localStorage.getItem(TELEMETRY_HISTORY_KEY);
-    if (!raw) return;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return;
-    state.telemetryHistory = parsed.slice(0, TELEMETRY_HISTORY_LIMIT);
+    return Array.isArray(parsed) ? parsed.slice(0, TELEMETRY_HISTORY_LIMIT) : [];
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+}
+
+function applyTelemetryHistory(history) {
+  state.telemetryHistory = Array.isArray(history)
+    ? history.slice(0, TELEMETRY_HISTORY_LIMIT)
+    : [];
+
+  saveLocalTelemetryHistory();
+  renderTelemetryHistory();
+}
+
+async function loadTelemetryHistory() {
+  applyTelemetryHistory(loadLocalTelemetryHistory());
+
+  try {
+    const response = await fetch(TELEMETRY_HISTORY_API_URL, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`History request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (Array.isArray(payload?.history)) {
+      applyTelemetryHistory(payload.history);
+    }
   } catch (error) {
     console.error(error);
   }
@@ -343,7 +371,7 @@ function renderTelemetryHistory() {
   renderHistoryCharts();
 }
 
-function addTelemetrySnapshot(data, latencyMs) {
+async function addTelemetrySnapshot(data, latencyMs) {
   const issues = collectTelemetryIssues(data);
   const snapshot = {
     timestampIso: new Date().toISOString(),
@@ -360,13 +388,28 @@ function addTelemetrySnapshot(data, latencyMs) {
     fetchLatencyMs: typeof latencyMs === "number" ? latencyMs : "unknown",
   };
 
-  state.telemetryHistory.unshift(snapshot);
-  if (state.telemetryHistory.length > TELEMETRY_HISTORY_LIMIT) {
-    state.telemetryHistory = state.telemetryHistory.slice(0, TELEMETRY_HISTORY_LIMIT);
-  }
+  applyTelemetryHistory([snapshot, ...state.telemetryHistory].slice(0, TELEMETRY_HISTORY_LIMIT));
 
-  saveTelemetryHistory();
-  renderTelemetryHistory();
+  try {
+    const response = await fetch(TELEMETRY_HISTORY_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ snapshot }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`History write failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (Array.isArray(payload?.history)) {
+      applyTelemetryHistory(payload.history);
+    }
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function exportTelemetryHistory() {
@@ -386,10 +429,14 @@ function exportTelemetryHistory() {
   URL.revokeObjectURL(url);
 }
 
-function clearTelemetryHistory() {
-  state.telemetryHistory = [];
-  saveTelemetryHistory();
-  renderTelemetryHistory();
+async function clearTelemetryHistory() {
+  try {
+    await fetch(TELEMETRY_HISTORY_API_URL, { method: "DELETE" });
+  } catch (error) {
+    console.error(error);
+  }
+
+  applyTelemetryHistory([]);
 }
 
 function buildTrendPoints() {
@@ -442,8 +489,8 @@ function renderHistoryCharts() {
         {
           label: "Uptime %",
           data: uptimeValues,
-          borderColor: "#93cbb0",
-          backgroundColor: "rgba(147, 203, 176, 0.16)",
+          borderColor: "#de7b7b",
+          backgroundColor: "rgba(222, 123, 123, 0.18)",
           fill: true,
           tension: 0.35,
           pointRadius: 0,
@@ -459,7 +506,7 @@ function renderHistoryCharts() {
           ...baseOptions.scales.y,
           max: 100,
           ticks: {
-            color: "#a1b0a8",
+            color: "#efc5c5",
             callback: (value) => `${value}%`,
           },
         },
@@ -475,8 +522,8 @@ function renderHistoryCharts() {
         {
           label: "Players Online",
           data: playersOnlineValues,
-          borderColor: "#6ba7d8",
-          backgroundColor: "rgba(107, 167, 216, 0.16)",
+          borderColor: "#ef8f8f",
+          backgroundColor: "rgba(239, 143, 143, 0.16)",
           fill: true,
           tension: 0.3,
           pointRadius: 0,
@@ -485,8 +532,8 @@ function renderHistoryCharts() {
         {
           label: "Max Capacity",
           data: playersMaxValues,
-          borderColor: "#d8f5c7",
-          backgroundColor: "rgba(216, 245, 199, 0.08)",
+          borderColor: "#f3c4c4",
+          backgroundColor: "rgba(243, 196, 196, 0.08)",
           fill: false,
           tension: 0.2,
           pointRadius: 0,
@@ -506,8 +553,8 @@ function renderHistoryCharts() {
         {
           label: "Issue Score",
           data: issueValues,
-          borderColor: "#d29a52",
-          backgroundColor: "rgba(210, 154, 82, 0.16)",
+          borderColor: "#b85757",
+          backgroundColor: "rgba(184, 87, 87, 0.16)",
           fill: true,
           tension: 0.3,
           pointRadius: 0,
@@ -526,8 +573,8 @@ function renderHistoryCharts() {
         {
           label: "Fetch ms",
           data: latencyValues,
-          borderColor: "#d06f6f",
-          backgroundColor: "rgba(208, 111, 111, 0.16)",
+          borderColor: "#ff9b8d",
+          backgroundColor: "rgba(255, 155, 141, 0.16)",
           fill: true,
           tension: 0.28,
           pointRadius: 0,
@@ -553,7 +600,7 @@ function createSparkline() {
       datasets: [
         {
           data: state.sparkline.values,
-          borderColor: "#8fbf9f",
+          borderColor: "#de7b7b",
           borderWidth: 2,
           tension: 0.35,
           pointRadius: 0,
@@ -611,7 +658,8 @@ function renderPlayersList(list = []) {
 
   const fragment = document.createDocumentFragment();
 
-  for (const username of list) {
+  for (const item of list) {
+    const username = typeof item === "string" ? item : item?.name ?? item?.username ?? "Unknown";
     const card = document.createElement("article");
     card.className = "player-card";
 
@@ -641,7 +689,7 @@ function applyOnlineStatus(online) {
   pill.textContent = online ? "Online" : "Offline";
 }
 
-function renderTelemetry(data, latencyMs) {
+async function renderTelemetry(data, latencyMs) {
   const online = Boolean(data?.online);
   const playersOnline = Number(data?.players?.online ?? 0);
   const playersMax = Number(data?.players?.max ?? 0);
@@ -694,9 +742,9 @@ function renderTelemetry(data, latencyMs) {
   elements.serverIcon.src = ICON_URL;
   elements.serverIcon.alt = `${SERVER_ADDRESS} icon`;
 
-  renderPlayersList(data?.players?.list ?? []);
+  renderPlayersList(data?.players?.list ?? data?.players ?? []);
   pushSparklinePoint(playersOnline);
-  addTelemetrySnapshot(data, latencyMs);
+  await addTelemetrySnapshot(data, latencyMs);
 
   setText(elements.lastUpdated, `Last updated: ${formatTimestamp()}`);
   state.telemetryReady = true;
@@ -923,7 +971,7 @@ async function fetchTelemetry() {
 
     const data = await response.json();
     const latencyMs = Math.round(performance.now() - startedAt);
-    renderTelemetry(data, latencyMs);
+    await renderTelemetry(data, latencyMs);
   } catch (error) {
     applyOnlineStatus(false);
     if (!state.telemetryReady) {
@@ -988,8 +1036,7 @@ function setupEvents() {
 }
 
 async function bootstrap() {
-  loadTelemetryHistory();
-  renderTelemetryHistory();
+  await loadTelemetryHistory();
   createSparkline();
   setupEvents();
 

@@ -1,19 +1,19 @@
 :root {
-  --bg: #0f1412;
-  --bg-accent: #18231e;
-  --panel: rgba(20, 26, 23, 0.92);
-  --panel-alt: rgba(17, 22, 20, 0.96);
+  --bg: #160d0f;
+  --bg-accent: #2a1114;
+  --panel: rgba(31, 17, 20, 0.92);
+  --panel-alt: rgba(24, 13, 15, 0.96);
   --text: #e9f0ec;
-  --muted: #a1b0a8;
-  --line: rgba(147, 170, 157, 0.2);
-  --ok: #78c986;
-  --bad: #df7777;
-  --accent: #93cbb0;
-  --accent-strong: #d8f5c7;
-  --join: #57c084;
-  --leave: #d06f6f;
-  --chat: #6ba7d8;
-  --kill: #d29a52;
+  --muted: #d4b7b7;
+  --line: rgba(226, 153, 153, 0.22);
+  --ok: #f09a9a;
+  --bad: #b74a4a;
+  --accent: #e38686;
+  --accent-strong: #ffc7c7;
+  --join: #ef8f8f;
+  --leave: #cf6666;
+  --chat: #e0a0a0;
+  --kill: #f0b07a;
   --shadow: 0 18px 60px rgba(0, 0, 0, 0.34);
 }
 
@@ -25,9 +25,9 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(111, 191, 115, 0.1), transparent 32%),
-    radial-gradient(circle at top right, rgba(107, 167, 216, 0.09), transparent 30%),
-    linear-gradient(180deg, #0d1210 0%, #111814 100%);
+    radial-gradient(circle at top left, rgba(227, 134, 134, 0.16), transparent 32%),
+    radial-gradient(circle at top right, rgba(255, 199, 199, 0.08), transparent 30%),
+    linear-gradient(180deg, #160d0f 0%, #1a1012 100%);
   color: var(--text);
   font-family: "Geist Mono", monospace;
   line-height: 1.4;
@@ -45,7 +45,7 @@ body {
   justify-content: space-between;
   gap: 1rem;
   border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(25, 32, 28, 0.96), rgba(16, 21, 19, 0.96));
+  background: linear-gradient(180deg, rgba(41, 18, 21, 0.96), rgba(24, 13, 15, 0.96));
   padding: 1rem 1.1rem;
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
@@ -59,12 +59,16 @@ body {
 
 .brand-title {
   font-family: "Space Grotesk", sans-serif;
-  font-size: 1.15rem;
+  background: #2a1617;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
+  border-color: #8b4b4b;
+  background: #2c1416;
+}
 
-.brand-subtitle {
+.button-primary:hover {
+  background: #3a1b1d;
   color: var(--muted);
   font-size: 0.92rem;
 }
@@ -347,12 +351,12 @@ body {
 }
 
 .pill-online {
-  border-color: #3a7f53;
+  border-color: #a95959;
   color: var(--ok);
 }
 
 .pill-offline {
-  border-color: #8a4848;
+  border-color: #6e2f2f;
   color: var(--bad);
 }
 
@@ -366,12 +370,12 @@ body {
 }
 
 .button:hover {
-  background: #1d2126;
+  background: #2a1617;
 }
 
 .button-primary {
-  border-color: #4f6a59;
-  background: #1b2520;
+  border-color: #8b4b4b;
+  background: #2c1416;
 }
 
 .details-table {
@@ -450,22 +454,22 @@ body {
 
 .event-join {
   color: var(--join);
-  border-color: #2f7e50;
+  border-color: #8b4b4b;
 }
 
 .event-leave {
   color: var(--leave);
-  border-color: #8a4b4b;
+  border-color: #6e2f2f;
 }
 
 .event-chat {
   color: var(--chat);
-  border-color: #4a7192;
+  border-color: #8b5a5a;
 }
 
 .event-kill {
   color: var(--kill);
-  border-color: #8f6642;
+  border-color: #9d6b44;
 }
 
 .event-text {
