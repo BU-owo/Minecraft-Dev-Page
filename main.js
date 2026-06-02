@@ -49,6 +49,10 @@ const elements = {
   playersList: document.getElementById("playersList"),
   activityFeed: document.getElementById("activityFeed"),
   sparklineCanvas: document.getElementById("playersSparkline"),
+  uptimeCanvas: document.getElementById("uptimeChart"),
+  playersChartCanvas: document.getElementById("playersChart"),
+  issuesChartCanvas: document.getElementById("issuesChart"),
+  latencyChartCanvas: document.getElementById("latencyChart"),
 };
 
 const state = {
@@ -58,6 +62,12 @@ const state = {
     chart: null,
     labels: [],
     values: [],
+  },
+  historyCharts: {
+    uptime: null,
+    players: null,
+    issues: null,
+    latency: null,
   },
   activitySnapshot: new Map(),
   activityEvents: [],
@@ -97,6 +107,11 @@ function clamp(number, min, max) {
   return Math.min(Math.max(number, min), max);
 }
 
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function formatFromUnixSeconds(value) {
   if (typeof value !== "number") {
     return "unknown";
@@ -112,6 +127,139 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function parsePlayersValue(value) {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const match = value.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (match) {
+      return Number(match[1]);
+    }
+
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
+function parseBooleanValue(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  return Boolean(value);
+}
+
+function collectTelemetryIssues(data) {
+  const issues = [];
+
+  if (!data?.online) issues.push("offline");
+  if (!data?.debug?.ping) issues.push("ping");
+  if (!data?.debug?.query) issues.push("query");
+  if (!data?.debug?.srv) issues.push("srv");
+  if (data?.eula_blocked) issues.push("eula");
+  if (data?.debug?.bedrock) issues.push("bedrock");
+  if (data?.debug?.querymismatch) issues.push("query mismatch");
+  if (!data?.debug?.ipinsrv) issues.push("ip in srv");
+  if (data?.debug?.cnameinsrv) issues.push("cname in srv");
+  if (data?.debug?.error?.query) issues.push("query error");
+
+  return issues;
+}
+
+function normalizeTelemetryHistoryItem(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  return {
+    label: item.timestamp ?? formatTimestamp(),
+    online: parseBooleanValue(item.online),
+    playersOnline: toNumber(item.playersOnline ?? parsePlayersValue(item.players), 0),
+    playersMax: toNumber(item.playersMax ?? (typeof item.players === "string" ? Number(item.players.split("/")[1]?.trim()) : 0), 0),
+    issueScore: toNumber(item.issueScore ?? (parseBooleanValue(item.online) ? 0 : 1), parseBooleanValue(item.online) ? 0 : 1),
+    fetchLatencyMs: item.fetchLatencyMs === "unknown" ? null : item.fetchLatencyMs == null ? null : toNumber(item.fetchLatencyMs, null),
+  };
+}
+
+function createChart(canvas, config) {
+  if (!canvas || typeof Chart === "undefined") {
+    return null;
+  }
+
+  const context = canvas.getContext("2d");
+  return new Chart(context, config);
+}
+
+function chartOptions() {
+  const gridColor = "rgba(161, 176, 168, 0.14)";
+  const tickColor = "#a1b0a8";
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: "index",
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        labels: {
+          color: tickColor,
+          boxWidth: 12,
+          boxHeight: 12,
+        },
+      },
+      tooltip: {
+        backgroundColor: "rgba(12, 17, 15, 0.96)",
+        borderColor: "rgba(147, 170, 157, 0.2)",
+        borderWidth: 1,
+        titleColor: "#e9f0ec",
+        bodyColor: "#e9f0ec",
+      },
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: tickColor,
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 6,
+        },
+        grid: {
+          color: gridColor,
+        },
+      },
+      y: {
+        ticks: {
+          color: tickColor,
+        },
+        grid: {
+          color: gridColor,
+        },
+        beginAtZero: true,
+      },
+    },
+  };
+}
+
+function destroyChart(chart) {
+  if (chart) {
+    chart.destroy();
+  }
 }
 
 function renderDnsList(records = []) {
@@ -169,12 +317,14 @@ function renderTelemetryHistory() {
   elements.historyTableBody.innerHTML = "";
 
   if (state.telemetryHistory.length === 0) {
-    elements.historyTableBody.innerHTML = '<tr><td colspan="7" class="empty-state">No snapshots yet.</td></tr>';
+    elements.historyTableBody.innerHTML = '<tr><td colspan="8" class="empty-state">No snapshots yet.</td></tr>';
+    renderHistoryCharts();
     return;
   }
 
   const fragment = document.createDocumentFragment();
   for (const item of state.telemetryHistory.slice(0, 40)) {
+    const issueCount = Number.isFinite(Number(item.issueScore)) ? Number(item.issueScore) : 0;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(item.timestamp)}</td>
@@ -183,23 +333,31 @@ function renderTelemetryHistory() {
       <td>${escapeHtml(item.version)}</td>
       <td>${escapeHtml(item.protocol)}</td>
       <td>${escapeHtml(item.cacheHit)}</td>
+      <td>${escapeHtml(issueCount)}</td>
       <td>${escapeHtml(item.fetchLatencyMs)}</td>
     `;
     fragment.appendChild(tr);
   }
 
   elements.historyTableBody.appendChild(fragment);
+  renderHistoryCharts();
 }
 
 function addTelemetrySnapshot(data, latencyMs) {
+  const issues = collectTelemetryIssues(data);
   const snapshot = {
+    timestampIso: new Date().toISOString(),
     timestamp: formatTimestamp(),
-    online: String(Boolean(data?.online)),
+    online: Boolean(data?.online),
+    playersOnline: Number(data?.players?.online ?? 0),
+    playersMax: Number(data?.players?.max ?? 0),
     players: `${Number(data?.players?.online ?? 0)} / ${Number(data?.players?.max ?? 0)}`,
     version: data?.version ?? "unknown",
     protocol: String(data?.protocol?.name ?? data?.protocol?.version ?? "unknown"),
     cacheHit: String(Boolean(data?.debug?.cachehit)),
-    fetchLatencyMs: typeof latencyMs === "number" ? String(latencyMs) : "unknown",
+    issueScore: issues.length,
+    issueSummary: issues.length > 0 ? issues.join(", ") : "none",
+    fetchLatencyMs: typeof latencyMs === "number" ? latencyMs : "unknown",
   };
 
   state.telemetryHistory.unshift(snapshot);
@@ -232,6 +390,154 @@ function clearTelemetryHistory() {
   state.telemetryHistory = [];
   saveTelemetryHistory();
   renderTelemetryHistory();
+}
+
+function buildTrendPoints() {
+  return state.telemetryHistory
+    .slice()
+    .reverse()
+    .map(normalizeTelemetryHistoryItem)
+    .filter(Boolean);
+}
+
+function buildRollingSeries(values, windowSize) {
+  return values.map((value, index) => {
+    const start = Math.max(0, index - windowSize + 1);
+    const window = values.slice(start, index + 1);
+    const total = window.reduce((sum, entry) => sum + entry, 0);
+    return window.length > 0 ? total / window.length : value;
+  });
+}
+
+function renderHistoryCharts() {
+  const points = buildTrendPoints();
+
+  destroyChart(state.historyCharts.uptime);
+  destroyChart(state.historyCharts.players);
+  destroyChart(state.historyCharts.issues);
+  destroyChart(state.historyCharts.latency);
+
+  if (points.length === 0) {
+    state.historyCharts.uptime = createChart(elements.uptimeCanvas, { type: "line", data: { labels: [], datasets: [] }, options: chartOptions() });
+    state.historyCharts.players = createChart(elements.playersChartCanvas, { type: "line", data: { labels: [], datasets: [] }, options: chartOptions() });
+    state.historyCharts.issues = createChart(elements.issuesChartCanvas, { type: "line", data: { labels: [], datasets: [] }, options: chartOptions() });
+    state.historyCharts.latency = createChart(elements.latencyChartCanvas, { type: "line", data: { labels: [], datasets: [] }, options: chartOptions() });
+    return;
+  }
+
+  const labels = points.map((point) => point.label);
+  const uptimeValues = buildRollingSeries(points.map((point) => (point.online ? 1 : 0)), 12).map((value) => Math.round(value * 100));
+  const playersOnlineValues = points.map((point) => point.playersOnline);
+  const playersMaxValues = points.map((point) => point.playersMax);
+  const issueValues = points.map((point) => point.issueScore);
+  const latencyValues = points.map((point) => point.fetchLatencyMs);
+
+  const baseOptions = chartOptions();
+
+  state.historyCharts.uptime = createChart(elements.uptimeCanvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Uptime %",
+          data: uptimeValues,
+          borderColor: "#93cbb0",
+          backgroundColor: "rgba(147, 203, 176, 0.16)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      ...baseOptions,
+      scales: {
+        ...baseOptions.scales,
+        y: {
+          ...baseOptions.scales.y,
+          max: 100,
+          ticks: {
+            color: "#a1b0a8",
+            callback: (value) => `${value}%`,
+          },
+        },
+      },
+    },
+  });
+
+  state.historyCharts.players = createChart(elements.playersChartCanvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Players Online",
+          data: playersOnlineValues,
+          borderColor: "#6ba7d8",
+          backgroundColor: "rgba(107, 167, 216, 0.16)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+        {
+          label: "Max Capacity",
+          data: playersMaxValues,
+          borderColor: "#d8f5c7",
+          backgroundColor: "rgba(216, 245, 199, 0.08)",
+          fill: false,
+          tension: 0.2,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          borderDash: [6, 4],
+        },
+      ],
+    },
+    options: baseOptions,
+  });
+
+  state.historyCharts.issues = createChart(elements.issuesChartCanvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Issue Score",
+          data: issueValues,
+          borderColor: "#d29a52",
+          backgroundColor: "rgba(210, 154, 82, 0.16)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: baseOptions,
+  });
+
+  state.historyCharts.latency = createChart(elements.latencyChartCanvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Fetch ms",
+          data: latencyValues,
+          borderColor: "#d06f6f",
+          backgroundColor: "rgba(208, 111, 111, 0.16)",
+          fill: true,
+          tension: 0.28,
+          pointRadius: 0,
+          borderWidth: 2,
+          spanGaps: true,
+        },
+      ],
+    },
+    options: baseOptions,
+  });
 }
 
 function createSparkline() {

@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./style.css" />
@@ -92,6 +92,47 @@
           </table>
         </section>
 
+        <section class="panel panel-history">
+          <div class="panel-header">
+            <h2>Trends Over Time</h2>
+            <p class="meta-text">Charts are built from telemetry snapshots stored in browser localStorage.</p>
+          </div>
+
+          <div class="chart-grid">
+            <article class="chart-card">
+              <div class="chart-card-header">
+                <h3>Uptime Trend</h3>
+                <span class="chart-subtitle">Rolling online percentage</span>
+              </div>
+              <canvas id="uptimeChart" aria-label="Uptime over time chart"></canvas>
+            </article>
+
+            <article class="chart-card">
+              <div class="chart-card-header">
+                <h3>Players Trend</h3>
+                <span class="chart-subtitle">Online players and capacity</span>
+              </div>
+              <canvas id="playersChart" aria-label="Players over time chart"></canvas>
+            </article>
+
+            <article class="chart-card">
+              <div class="chart-card-header">
+                <h3>Issue Score</h3>
+                <span class="chart-subtitle">Derived from debug flags and outages</span>
+              </div>
+              <canvas id="issuesChart" aria-label="Issues over time chart"></canvas>
+            </article>
+
+            <article class="chart-card">
+              <div class="chart-card-header">
+                <h3>Telemetry Latency</h3>
+                <span class="chart-subtitle">Fetch time in milliseconds</span>
+              </div>
+              <canvas id="latencyChart" aria-label="Latency over time chart"></canvas>
+            </article>
+          </div>
+        </section>
+
         <section class="panel panel-admin">
           <div class="panel-header">
             <h2>Admin Diagnostics</h2>
@@ -145,11 +186,12 @@
                     <th>Version</th>
                     <th>Protocol</th>
                     <th>Cache Hit</th>
+                    <th>Issues</th>
                     <th>Fetch ms</th>
                   </tr>
                 </thead>
                 <tbody id="historyTableBody">
-                  <tr><td colspan="7" class="loading">No snapshots yet.</td></tr>
+                  <tr><td colspan="8" class="loading">No snapshots yet.</td></tr>
                 </tbody>
               </table>
             </div>
