@@ -93,8 +93,13 @@ function sendJson(res, statusCode, payload) {
 }
 
 async function readHistory() {
-  const stored = await kv.get(HISTORY_KEY);
-  return normalizeHistory(Array.isArray(stored) ? stored : []);
+  try {
+    const stored = await kv.get(HISTORY_KEY);
+    return normalizeHistory(Array.isArray(stored) ? stored : []);
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
 }
 
 export default async function handler(req, res) {
@@ -115,7 +120,11 @@ export default async function handler(req, res) {
       }
 
       const history = [snapshot, ...(await readHistory())].slice(0, HISTORY_LIMIT);
-      await kv.set(HISTORY_KEY, history);
+      try {
+        await kv.set(HISTORY_KEY, history);
+      } catch (error) {
+        console.error(error);
+      }
       sendJson(res, 200, { history });
       return;
     } catch (error) {
@@ -127,7 +136,11 @@ export default async function handler(req, res) {
 
   if (req.method === "DELETE") {
     try {
-      await kv.del(HISTORY_KEY);
+      try {
+        await kv.del(HISTORY_KEY);
+      } catch (error) {
+        console.error(error);
+      }
       sendJson(res, 200, { history: [] });
       return;
     } catch (error) {

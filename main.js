@@ -3,8 +3,10 @@ const TELEMETRY_URL = `https://api.mcsrvstat.us/3/${SERVER_ADDRESS}`;
 const ICON_URL = `https://api.mcsrvstat.us/icon/${SERVER_ADDRESS}`;
 const ACTIVITY_URL = "/api/activity";
 const ACTIVITY_URL_FALLBACK = null;
-const TELEMETRY_POLL_MS = 30_000;
-const ACTIVITY_POLL_MS = 5_000;
+const DEFAULT_POLL_SECONDS = 30;
+const MIN_POLL_SECONDS = 5;
+const MAX_POLL_SECONDS = 300;
+const POLL_SECONDS_KEY = "budpePollSeconds";
 const TELEMETRY_HISTORY_API_URL = "/api/history";
 const TELEMETRY_HISTORY_KEY = "budpeTelemetryHistory";
 const TELEMETRY_HISTORY_LIMIT = 250;
@@ -12,6 +14,8 @@ const TELEMETRY_HISTORY_LIMIT = 250;
 const elements = {
   motdSubtitle: document.getElementById("motdSubtitle"),
   onlinePill: document.getElementById("onlinePill"),
+  pollIntervalInput: document.getElementById("pollIntervalInput"),
+  applyPollButton: document.getElementById("applyPollButton"),
   copyIpButton: document.getElementById("copyIpButton"),
   refreshButton: document.getElementById("refreshButton"),
   lastUpdated: document.getElementById("lastUpdated"),
@@ -19,6 +23,7 @@ const elements = {
   playersCount: document.getElementById("playersCount"),
   playersPercent: document.getElementById("playersPercent"),
   playersFill: document.getElementById("playersFill"),
+  heroPlayersList: document.getElementById("heroPlayersList"),
   versionChip: document.getElementById("versionChip"),
   protocolChip: document.getElementById("protocolChip"),
   softwareChip: document.getElementById("softwareChip"),
@@ -75,6 +80,11 @@ const state = {
   activityEvents: [],
   activitySeenKeys: new Set(),
   telemetryHistory: [],
+  polling: {
+    seconds: DEFAULT_POLL_SECONDS,
+    telemetryTimerId: null,
+    activityTimerId: null,
+  },
 };
 
 function removeLoadingClass(node) {
@@ -262,6 +272,48 @@ function destroyChart(chart) {
   if (chart) {
     chart.destroy();
   }
+}
+
+function clampPollSeconds(value) {
+  return clamp(toNumber(value, DEFAULT_POLL_SECONDS), MIN_POLL_SECONDS, MAX_POLL_SECONDS);
+}
+
+function readPollSecondsSetting() {
+  const raw = localStorage.getItem(POLL_SECONDS_KEY);
+  if (!raw) {
+    return DEFAULT_POLL_SECONDS;
+  }
+
+  return clampPollSeconds(raw);
+}
+
+function savePollSecondsSetting(seconds) {
+  localStorage.setItem(POLL_SECONDS_KEY, String(clampPollSeconds(seconds)));
+}
+
+function syncPollControls() {
+  if (!elements.pollIntervalInput) return;
+  elements.pollIntervalInput.value = String(state.polling.seconds);
+}
+
+function schedulePolling() {
+  if (state.polling.telemetryTimerId) {
+    clearInterval(state.polling.telemetryTimerId);
+  }
+  if (state.polling.activityTimerId) {
+    clearInterval(state.polling.activityTimerId);
+  }
+
+  const intervalMs = state.polling.seconds * 1000;
+  state.polling.telemetryTimerId = setInterval(fetchTelemetry, intervalMs);
+  state.polling.activityTimerId = setInterval(fetchActivity, intervalMs);
+}
+
+function applyPollSeconds(seconds) {
+  state.polling.seconds = clampPollSeconds(seconds);
+  savePollSecondsSetting(state.polling.seconds);
+  syncPollControls();
+  schedulePolling();
 }
 
 function normalizePlayerIdentity(item) {
@@ -710,16 +762,27 @@ function pushSparklinePoint(playersOnline) {
 }
 
 function renderPlayersList(list = []) {
-  elements.playersList.innerHTML = "";
+  renderPlayerCards(list, elements.playersList, "No players online.");
+}
+
+function renderHeroPlayersList(list = []) {
+  renderPlayerCards(list, elements.heroPlayersList, "No player heads available.", 8);
+}
+
+function renderPlayerCards(list = [], container, emptyText = "No players online.", limit = null) {
+  if (!container) return;
+
+  container.innerHTML = "";
 
   if (!Array.isArray(list) || list.length === 0) {
-    elements.playersList.innerHTML = '<p class="empty-state">No players online.</p>';
+    container.innerHTML = `<p class="empty-state">${escapeHtml(emptyText)}</p>`;
     return;
   }
 
+  const source = typeof limit === "number" ? list.slice(0, limit) : list;
   const fragment = document.createDocumentFragment();
 
-  for (const item of list) {
+  for (const item of source) {
     const identity = normalizePlayerIdentity(item);
     if (!identity) continue;
 
@@ -751,7 +814,7 @@ function renderPlayersList(list = []) {
     fragment.appendChild(card);
   }
 
-  elements.playersList.appendChild(fragment);
+  container.appendChild(fragment);
 }
 
 function applyOnlineStatus(online) {
@@ -819,7 +882,9 @@ async function renderTelemetry(data, latencyMs) {
   const telemetryPlayers = getTelemetryPlayers(data);
   state.lastTelemetryPlayers = telemetryPlayers;
 
-  renderPlayersList(telemetryPlayers.length > 0 ? telemetryPlayers : getActivityPlayers());
+  const visiblePlayers = telemetryPlayers.length > 0 ? telemetryPlayers : getActivityPlayers();
+  renderPlayersList(visiblePlayers);
+  renderHeroPlayersList(visiblePlayers);
   pushSparklinePoint(playersOnline);
   await addTelemetrySnapshot(data, latencyMs);
 
@@ -1072,7 +1137,9 @@ async function fetchActivity() {
 
     state.activitySnapshot = nextSnapshot;
     if (state.lastTelemetryPlayers.length === 0) {
-      renderPlayersList(getActivityPlayers(nextSnapshot));
+      const activityPlayers = getActivityPlayers(nextSnapshot);
+      renderPlayersList(activityPlayers);
+      renderHeroPlayersList(activityPlayers);
     }
     state.activityReady = true;
     renderActivityFeed();
@@ -1109,6 +1176,13 @@ async function copyIpToClipboard() {
 
 function setupEvents() {
   elements.copyIpButton.addEventListener("click", copyIpToClipboard);
+  elements.applyPollButton.addEventListener("click", () => {
+    applyPollSeconds(elements.pollIntervalInput.value);
+  });
+  elements.pollIntervalInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    applyPollSeconds(elements.pollIntervalInput.value);
+  });
   elements.refreshButton.addEventListener("click", async () => {
     await Promise.all([fetchTelemetry(), fetchActivity()]);
   });
@@ -1117,14 +1191,16 @@ function setupEvents() {
 }
 
 async function bootstrap() {
+  state.polling.seconds = readPollSecondsSetting();
+  syncPollControls();
+
   await loadTelemetryHistory();
   createSparkline();
   setupEvents();
 
   await Promise.all([fetchTelemetry(), fetchActivity()]);
 
-  setInterval(fetchTelemetry, TELEMETRY_POLL_MS);
-  setInterval(fetchActivity, ACTIVITY_POLL_MS);
+  schedulePolling();
 }
 
 bootstrap();

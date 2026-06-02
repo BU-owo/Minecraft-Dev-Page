@@ -15,10 +15,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./style.css" />
-    <script
-      defer
-      src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"
-    ></script>
+    <script defer src="./vendor/chart.umd.js"></script>
     <script defer src="./main.js"></script>
   </head>
   <body>
@@ -31,6 +28,11 @@
 
         <div class="nav-actions">
           <span id="onlinePill" class="pill loading">Checking...</span>
+          <div class="poll-controls">
+            <label for="pollIntervalInput">Poll sec</label>
+            <input id="pollIntervalInput" type="number" min="5" max="300" step="1" value="30" />
+            <button id="applyPollButton" class="button" type="button">Apply</button>
+          </div>
           <button id="copyIpButton" class="button" type="button">Copy IP</button>
           <button id="refreshButton" class="button button-primary" type="button">Refresh</button>
         </div>
@@ -64,6 +66,9 @@
                 <div id="playersFill" class="progress-fill"></div>
               </div>
               <canvas id="playersSparkline" aria-label="Players over time"></canvas>
+              <div id="heroPlayersList" class="hero-players-list">
+                <p class="empty-state loading">Loading player heads...</p>
+              </div>
             </div>
           </div>
 

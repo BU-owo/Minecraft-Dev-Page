@@ -1,0 +1,24 @@
+name: Cron Snapshot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  hit-snapshot-endpoint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call snapshot endpoint
+        env:
+          SNAPSHOT_URL: ${{ secrets.SNAPSHOT_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SNAPSHOT_URL" ]; then
+            echo "SNAPSHOT_URL secret is missing"
+            exit 1
+          fi
+
+          curl -fsS \
+            -H "x-cron-key: $CRON_SECRET" \
+            "$SNAPSHOT_URL"
