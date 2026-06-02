@@ -150,7 +150,6 @@ body {
   grid-column: 1 / span 2;
 }
 
-.panel-players,
 .panel-activity {
   grid-column: 1 / span 2;
 }
@@ -542,7 +541,6 @@ body {
   .panel-hero,
   .panel-details,
   .panel-history,
-  .panel-players,
   .panel-activity {
     grid-column: auto;
   }
